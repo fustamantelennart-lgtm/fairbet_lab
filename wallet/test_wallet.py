@@ -8,9 +8,9 @@ from wallet.models import Account, Transaction, LedgerEntry
 class WalletTDDTestCase(TestCase):
 
     def setUp(self):
-        # Solución de control: Usamos get_or_create para que Hypothesis no choque por duplicación
+        # Solución: Quitamos el id=99 manual para que la base de datos use su autoincremental limpio
         self.user, _ = User.objects.get_or_create(username='juan_perez')
-        self.casa_account, _ = Account.objects.get_or_create(id=99, type=Account.AccountType.CASA, currency='PEN')
+        self.casa_account, _ = Account.objects.get_or_create(type=Account.AccountType.CASA, currency='PEN')
         self.wallet_juan, _ = Account.objects.get_or_create(user=self.user, type=Account.AccountType.WALLET, currency='PEN')
 
     @given(amount=st.decimals(min_value=Decimal('0.01'), max_value=Decimal('10000.00'), places=4))
@@ -39,17 +39,15 @@ class WalletTDDTestCase(TestCase):
     @given(amount=st.decimals(min_value=Decimal('0.01'), max_value=Decimal('10000.00'), places=4))
     def test_service_execute_recharge_creates_balanced_ledger_entries(self, amount):
         """
-        Fase RED (Ciclo 2): Probar que el servicio de recarga automatizado crea 
+        Fase GREEN: Probar que el servicio de recarga automatizado crea 
         una transacción y dos asientos contables asociados que balancean a cero.
         """
-        # Usamos get_or_create también aquí para el entorno de la propiedad
         service_user, _ = User.objects.get_or_create(username='tester_wallet_service')
         
         casa = Account.objects.get(type=Account.AccountType.CASA)
         user_wallet, _ = Account.objects.get_or_create(user=service_user, type=Account.AccountType.WALLET, currency='PEN')
 
         # 2. Ejecución (Act)
-        # Importamos el servicio que aún NO existe dentro del test para provocar el verdadero fallo controlado
         from wallet.services import execute_recharge
         
         transaction = execute_recharge(user=service_user, amount=amount)
