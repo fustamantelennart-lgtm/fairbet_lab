@@ -1,0 +1,18 @@
+# Django residual
+*.pyc
+__pycache__/
+db.sqlite3
+media/
+
+# Entornos y Configs locales
+.env
+config/settings/local.py
+
+# Docker y Bases de datos locales
+.pytest_cache/
+.hypothesis/
+postgres_data/
+
+# Sistema Operativo
+.DS_Store
+Thumbs.db
