@@ -188,12 +188,19 @@ class BetSettlementTDDTestCase(TestCase):
         odds=st.decimals(min_value=Decimal('1.10'), max_value=Decimal('10.00'), places=2),
     )
     def test_settle_winning_bet_credits_payout_to_user_wallet(self, amount, odds):
-        """Una apuesta ganada acredita stake*odds al wallet del usuario."""
+        """
+        Una apuesta ganada debe:
+        - Liberar el stake bloqueado en PENDING (débito).
+        - Que la CASA aporte la ganancia (débito).
+        - Acreditar el payout completo (stake*odds) al WALLET del usuario.
+        - Mantener la invariante de partida doble (suma=0).
+        """
         from wallet.services import execute_bet_settlement
         from wallet.models import Bet
 
         bet = self._crear_bet_con_fondos_bloqueados(amount, odds)
         expected_payout = (amount * odds).quantize(Decimal('0.0001'))
+        expected_house_loss = (expected_payout - amount).quantize(Decimal('0.0001'))
 
         settlement_tx = execute_bet_settlement(bet=bet, won=True)
 
@@ -204,19 +211,27 @@ class BetSettlementTDDTestCase(TestCase):
         # 2. Se creó una transacción SETTLEMENT
         self.assertEqual(settlement_tx.kind, Transaction.TransactionKind.SETTLEMENT)
 
-        # 3. Las dos entradas del settlement están balanceadas (invariante partida doble)
+        # 3. Tres entradas: PENDING (debit stake), CASA (debit ganancia), WALLET (credit payout)
         entries = settlement_tx.entries.all()
-        self.assertEqual(entries.count(), 2)
+        self.assertEqual(entries.count(), 3)
+
+        # 4. Invariante de partida doble: la suma firmada debe ser cero
         suma = Decimal('0.0000')
         for e in entries:
             suma += e.amount if e.direction == LedgerEntry.Direction.CREDIT else -e.amount
         self.assertEqual(suma, Decimal('0.0000'))
 
-        # 4. El crédito fue al WALLET del usuario por el payout exacto
-        credito_a_wallet = entries.get(
-            account=self.wallet, direction=LedgerEntry.Direction.CREDIT
-        )
-        self.assertEqual(credito_a_wallet.amount, expected_payout)
+        # 5. El crédito al WALLET es exactamente el payout
+        credito_wallet = entries.get(account=self.wallet, direction=LedgerEntry.Direction.CREDIT)
+        self.assertEqual(credito_wallet.amount, expected_payout)
+
+        # 6. El débito en PENDING libera el stake original
+        debito_pending = entries.get(account=self.pending, direction=LedgerEntry.Direction.DEBIT)
+        self.assertEqual(debito_pending.amount, amount)
+
+        # 7. La CASA aporta la diferencia (payout - stake)
+        debito_casa = entries.get(account=self.casa, direction=LedgerEntry.Direction.DEBIT)
+        self.assertEqual(debito_casa.amount, expected_house_loss)
 
     @given(
         amount=st.decimals(min_value=Decimal('1.00'), max_value=Decimal('100.00'), places=4),
