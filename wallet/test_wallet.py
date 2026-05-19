@@ -1,8 +1,9 @@
+# wallet/test_wallet.py
 from decimal import Decimal
-from django.test import TestCase
+# CAMBIAMOS ESTA LÍNEA: Importamos el TestCase desde hypothesis en lugar de django
+from hypothesis.extra.django import TestCase 
 from hypothesis import given, strategies as st
 from django.contrib.auth.models import User
-# IMPORTANTE: Estos modelos aún NO existen, por eso la prueba va a fallar estrepitosamente.
 from wallet.models import Account, Transaction, LedgerEntry
 
 class WalletTDDTestCase(TestCase):
