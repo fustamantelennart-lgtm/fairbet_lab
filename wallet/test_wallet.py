@@ -99,3 +99,49 @@ class WalletTDDTestCase(TestCase):
 
         with self.assertRaises(ValueError):
             execute_bet_lock(user=poor_user, amount=amount)
+
+
+class BetModelTDDTestCase(TestCase):
+
+    def setUp(self):
+        self.user, _ = User.objects.get_or_create(username='apostador_bet_test')
+        self.wallet, _ = Account.objects.get_or_create(user=self.user, type=Account.AccountType.WALLET, currency='PEN')
+        self.pending_acc, _ = Account.objects.get_or_create(type=Account.AccountType.PENDING, currency='PEN')
+
+    @given(
+        amount=st.decimals(min_value=Decimal('1.00'), max_value=Decimal('100.00'), places=4),
+        odds=st.decimals(min_value=Decimal('1.10'), max_value=Decimal('10.00'), places=2)
+    )
+    def test_create_bet_sets_default_accepted_state_and_calculates_potential_payout(self, amount, odds):
+        """
+        Fase RED: Validar que el modelo Bet almacene correctamente los montos,
+        cuotas, su estado inicial 'ACCEPTED' según la guía, y calcule el pago potencial.
+        """
+        # 1. Simulamos el bloqueo previo de fondos
+        # Le damos saldo al usuario para que no falle el servicio contable
+        casa_account, _ = Account.objects.get_or_create(type=Account.AccountType.CASA, currency='PEN')
+        init_tx = Transaction.objects.create(kind=Transaction.TransactionKind.RECHARGE)
+        LedgerEntry.objects.create(transaction=init_tx, account=casa_account, amount=amount, direction=LedgerEntry.Direction.DEBIT)
+        LedgerEntry.objects.create(transaction=init_tx, account=self.wallet, amount=amount, direction=LedgerEntry.Direction.CREDIT)
+        
+        from wallet.services import execute_bet_lock
+        lock_tx = execute_bet_lock(user=self.user, amount=amount)
+
+        # 2. Intentamos importar y crear el modelo Bet (Que aún no existe en models.py)
+        from wallet.models import Bet
+        
+        bet = Bet.objects.create(
+            user=self.user,
+            amount=amount,
+            odds=odds,
+            lock_transaction=lock_tx,
+            status=Bet.BetStatus.ACCEPTED
+        )
+
+        # 3. Verificaciones de la estructura e invariantes del modelo
+        self.assertIsNotNone(bet.id)
+        self.assertEqual(bet.status, 'ACCEPTED')
+        
+        # El pago potencial debe ser exactamente: amount * odds
+        expected_payout = (amount * odds).quantize(Decimal('0.0001'))
+        self.assertEqual(bet.potential_payout, expected_payout)
