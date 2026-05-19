@@ -1,3 +1,5 @@
+# wallet/models.py
+from decimal import Decimal  # <-- AGREGADO AQUÍ EN LA PARTE SUPERIOR GLOBAL
 from django.db import models
 from django.contrib.auth.models import User
 
@@ -44,3 +46,32 @@ class LedgerEntry(models.Model):
 
     def __str__(self):
         return f"Entry {self.id} | {self.direction} | {self.amount}"
+
+
+class Bet(models.Model):
+    class BetStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Pendiente de Validación'
+        ACCEPTED = 'ACCEPTED', 'Aceptada Activa'
+        WON = 'WON', 'Ganada'
+        LOST = 'LOST', 'Perdida'
+        CANCELLED = 'CANCELLED', 'Cancelada'
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='bets')
+    amount = models.DecimalField(max_digits=18, decimal_places=4)
+    odds = models.DecimalField(max_digits=6, decimal_places=2)
+    status = models.CharField(max_length=15, choices=BetStatus.choices, default=BetStatus.ACCEPTED)
+    
+    # Vinculación obligatoria con la transacción de partida doble que congeló los fondos
+    lock_transaction = models.OneToOneField(Transaction, on_delete=models.PROTECT, related_name='bet')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    @property
+    def potential_payout(self) -> Decimal:
+        """
+        Calcula dinámicamente el pago potencial usando aritmética de precisión fija.
+        Redondea a 4 decimales contables usando cuantización.
+        """
+        return (self.amount * self.odds).quantize(Decimal('0.0001'))
+
+    def __str__(self):
+        return f"Bet {self.id} | {self.user.username} | {self.status} | Payout: {self.potential_payout}"
