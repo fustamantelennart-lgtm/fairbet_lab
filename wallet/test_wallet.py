@@ -145,3 +145,109 @@ class BetModelTDDTestCase(TestCase):
         # El pago potencial debe ser exactamente: amount * odds
         expected_payout = (amount * odds).quantize(Decimal('0.0001'))
         self.assertEqual(bet.potential_payout, expected_payout)
+
+
+class BetSettlementTDDTestCase(TestCase):
+    """
+    Fase RED del ciclo de liquidación.
+    Valida que execute_bet_settlement cierre correctamente la partida doble:
+      - WON  : PENDING -> WALLET (acredita payout = stake * odds al usuario)
+      - LOST : PENDING -> CASA   (libera el stake a la casa)
+    Y que sea idempotente: una bet ya liquidada no puede liquidarse de nuevo.
+    """
+
+    def setUp(self):
+        self.user, _ = User.objects.get_or_create(username='apostador_liquidacion')
+        self.wallet, _ = Account.objects.get_or_create(
+            user=self.user, type=Account.AccountType.WALLET, currency='PEN'
+        )
+        self.pending, _ = Account.objects.get_or_create(
+            type=Account.AccountType.PENDING, currency='PEN'
+        )
+        self.casa, _ = Account.objects.get_or_create(
+            type=Account.AccountType.CASA, currency='PEN'
+        )
+
+    def _crear_bet_con_fondos_bloqueados(self, amount, odds):
+        """Helper: recarga + bloqueo + creación de Bet en ACCEPTED."""
+        from wallet.services import execute_recharge, execute_bet_lock
+        from wallet.models import Bet
+
+        execute_recharge(user=self.user, amount=amount)
+        lock_tx = execute_bet_lock(user=self.user, amount=amount)
+        return Bet.objects.create(
+            user=self.user,
+            amount=amount,
+            odds=odds,
+            lock_transaction=lock_tx,
+            status=Bet.BetStatus.ACCEPTED,
+        )
+
+    @given(
+        amount=st.decimals(min_value=Decimal('1.00'), max_value=Decimal('100.00'), places=4),
+        odds=st.decimals(min_value=Decimal('1.10'), max_value=Decimal('10.00'), places=2),
+    )
+    def test_settle_winning_bet_credits_payout_to_user_wallet(self, amount, odds):
+        """Una apuesta ganada acredita stake*odds al wallet del usuario."""
+        from wallet.services import execute_bet_settlement
+        from wallet.models import Bet
+
+        bet = self._crear_bet_con_fondos_bloqueados(amount, odds)
+        expected_payout = (amount * odds).quantize(Decimal('0.0001'))
+
+        settlement_tx = execute_bet_settlement(bet=bet, won=True)
+
+        # 1. Bet cambió a WON
+        bet.refresh_from_db()
+        self.assertEqual(bet.status, Bet.BetStatus.WON)
+
+        # 2. Se creó una transacción SETTLEMENT
+        self.assertEqual(settlement_tx.kind, Transaction.TransactionKind.SETTLEMENT)
+
+        # 3. Las dos entradas del settlement están balanceadas (invariante partida doble)
+        entries = settlement_tx.entries.all()
+        self.assertEqual(entries.count(), 2)
+        suma = Decimal('0.0000')
+        for e in entries:
+            suma += e.amount if e.direction == LedgerEntry.Direction.CREDIT else -e.amount
+        self.assertEqual(suma, Decimal('0.0000'))
+
+        # 4. El crédito fue al WALLET del usuario por el payout exacto
+        credito_a_wallet = entries.get(
+            account=self.wallet, direction=LedgerEntry.Direction.CREDIT
+        )
+        self.assertEqual(credito_a_wallet.amount, expected_payout)
+
+    @given(
+        amount=st.decimals(min_value=Decimal('1.00'), max_value=Decimal('100.00'), places=4),
+        odds=st.decimals(min_value=Decimal('1.10'), max_value=Decimal('10.00'), places=2),
+    )
+    def test_settle_losing_bet_releases_stake_to_casa(self, amount, odds):
+        """Una apuesta perdida libera el stake desde PENDING hacia CASA."""
+        from wallet.services import execute_bet_settlement
+        from wallet.models import Bet
+
+        bet = self._crear_bet_con_fondos_bloqueados(amount, odds)
+
+        settlement_tx = execute_bet_settlement(bet=bet, won=False)
+
+        bet.refresh_from_db()
+        self.assertEqual(bet.status, Bet.BetStatus.LOST)
+        self.assertEqual(settlement_tx.kind, Transaction.TransactionKind.SETTLEMENT)
+
+        # En LOST el crédito va a CASA por el monto del stake (no el payout)
+        credito_a_casa = settlement_tx.entries.get(
+            account=self.casa, direction=LedgerEntry.Direction.CREDIT
+        )
+        self.assertEqual(credito_a_casa.amount, amount)
+
+    def test_settle_already_settled_bet_raises(self):
+        """No se puede liquidar dos veces la misma apuesta (previene doble pago)."""
+        from wallet.services import execute_bet_settlement
+        from wallet.models import Bet
+
+        bet = self._crear_bet_con_fondos_bloqueados(Decimal('10.0000'), Decimal('2.00'))
+        execute_bet_settlement(bet=bet, won=True)
+
+        with self.assertRaises(ValueError):
+            execute_bet_settlement(bet=bet, won=True)
