@@ -7,8 +7,18 @@ from wallet.models import Account, Transaction, LedgerEntry
 
 
 def execute_recharge(user: User, amount: Decimal) -> Transaction:
+    """
+    Realiza una recarga (depósito simulado) en el wallet del usuario.
+
+    Valida controles regulatorios ANTES de tocar el wallet:
+      - Límites de depósito (diario/semanal/mensual) en ventana móvil.
+    """
     if amount <= 0:
         raise ValueError("El monto de la recarga debe ser mayor a cero.")
+
+    # --- Control regulatorio: límites de depósito ---
+    from compliance.services import check_deposit_within_limits
+    check_deposit_within_limits(user, amount)
 
     with transaction.atomic():
         casa_account = Account.objects.get(type=Account.AccountType.CASA)
