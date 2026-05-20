@@ -19,6 +19,7 @@ INSTALLED_APPS = [
     'channels',
     'wallet',
     'events',
+    'accounts',
 ]
 
 MIDDLEWARE = [
