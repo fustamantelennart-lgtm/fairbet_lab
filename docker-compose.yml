@@ -1,21 +1,19 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:15-alpine
     volumes:
       - postgres_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_DB=fairbet_db
-      - POSTGRES_USER=fairbet_admin
-      - POSTGRES_PASSWORD=fairbet_pass
+      - POSTGRES_DB=${POSTGRES_DB:-fairbet_db}
+      - POSTGRES_USER=${POSTGRES_USER:-fairbet_admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-fairbet_pass}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT_HOST:-5432}:5432"
 
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT_HOST:-6379}:6379"
 
   web:
     build: .
@@ -27,6 +25,8 @@ services:
     depends_on:
       - db
       - redis
+    env_file:
+      - .env
     environment:
       - DJANGO_SETTINGS_MODULE=config.settings.local
 

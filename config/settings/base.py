@@ -1,12 +1,28 @@
 # config/settings/base.py
-import os
+"""
+Settings base de FairBet Lab.
+
+Variables sensibles se leen desde el `.env` (no versionado) usando
+python-decouple. Los valores por defecto solo se usan en desarrollo si
+falta una variable; en CI/producción todas las variables deben venir
+del entorno explícitamente.
+"""
 from pathlib import Path
+from decouple import config, Csv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 
-SECRET_KEY = 'django-insecure-educativa-fairbet-lab-key-2026'
-DEBUG = True
-ALLOWED_HOSTS = ['*']
+# === Seguridad ===
+# SECRET_KEY se lee del entorno. NUNCA committear el valor real.
+# Para generar una: python -c "from django.core.management.utils import get_random_secret_key; print(get_random_secret_key())"
+SECRET_KEY = config('DJANGO_SECRET_KEY', default='django-insecure-FALLBACK-ONLY-FOR-FIRST-BOOT-CHANGE-ME')
+
+# DEBUG controla traces de error visibles al usuario. Solo True en dev.
+DEBUG = config('DJANGO_DEBUG', default=False, cast=bool)
+
+# Lista de hosts permitidos (separados por coma en el .env)
+ALLOWED_HOSTS = config('DJANGO_ALLOWED_HOSTS', default='*', cast=Csv())
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -32,6 +48,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -50,16 +67,20 @@ TEMPLATES = [
 
 ROOT_URLCONF = 'config.urls'
 WSGI_APPLICATION = 'config.wsgi.application'
-ASGI_APPLICATION = 'config.wsgi.application'
+# Channels usa ASGI; corregido: antes apuntaba a wsgi por error.
+ASGI_APPLICATION = 'config.asgi.application'
 
+# === Base de datos ===
+# Credenciales se leen del .env. Los defaults son para arranque mínimo
+# en una compu nueva sin .env aún.
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
-        'NAME': 'fairbet_db',
-        'USER': 'fairbet_admin',
-        'PASSWORD': 'fairbet_pass',
-        'HOST': 'db',
-        'PORT': '5432',
+        'NAME': config('POSTGRES_DB', default='fairbet_db'),
+        'USER': config('POSTGRES_USER', default='fairbet_admin'),
+        'PASSWORD': config('POSTGRES_PASSWORD', default='fairbet_pass'),
+        'HOST': config('POSTGRES_HOST', default='db'),
+        'PORT': config('POSTGRES_PORT', default='5432'),
     }
 }
 
