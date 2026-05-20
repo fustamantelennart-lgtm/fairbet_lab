@@ -29,9 +29,21 @@ def execute_bet_lock(user: User, amount: Decimal) -> Transaction:
     """
     Bloquea fondos para una apuesta de forma atómica y concurrente.
     Mueve saldos de WALLET del usuario a la cuenta transitoria PENDING.
+
+    Antes de tocar el wallet, valida controles regulatorios:
+      - El usuario NO debe estar autoexcluido (Nivel 1 punto 5 - juego responsable).
     """
     if amount <= 0:
         raise ValueError("El monto de la apuesta debe ser mayor a cero.")
+
+    # --- Control regulatorio (juego responsable) ---
+    # Import local: evita ciclo de imports wallet <-> compliance.
+    from compliance.services import is_user_self_excluded
+    if is_user_self_excluded(user):
+        raise ValueError(
+            f"El usuario {user.username} está autoexcluido. "
+            f"No puede colocar apuestas hasta que el periodo de autoexclusión termine."
+        )
 
     with transaction.atomic():
         # Bloqueo pesimista de concurrencia
