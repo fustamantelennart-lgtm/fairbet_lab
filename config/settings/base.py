@@ -20,6 +20,7 @@ INSTALLED_APPS = [
     'wallet',
     'events',
     'accounts',
+    'compliance',
 ]
 
 MIDDLEWARE = [
