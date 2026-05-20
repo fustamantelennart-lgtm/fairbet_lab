@@ -27,3 +27,10 @@
 * **Error presentado:** 5 tests previamente verdes pasaron a rojo. `AttributeError: 'NoneType' object has no attribute 'id'` en el test directo de `execute_bet_lock`, y cascada de `IntegrityError: null value in column "lock_transaction_id"` en todos los tests que dependían del helper `_crear_bet_con_fondos_bloqueados`.
 * **Causa raíz:** Edit manual no atómico sobre un archivo crítico. La función seguía creando las entries (efecto colateral en la DB) pero devolvía `None` implícitamente, propagándolo a `Bet.objects.create(lock_transaction=None)` y violando la constraint NOT NULL.
 * **Solución aplicada:** Restaurar el `return tx` al final de `execute_bet_lock`. **Valor de TDD demostrado en vivo:** la regresión se detectó inmediatamente (el mismo pytest), se localizó en minutos (5 tests fallando con el mismo síntoma apuntan a la dependencia común), y no llegó a producción. Si esto hubiera ocurrido sin tests, el bug habría sido "las apuestas no se pueden crear" — síntoma vago, debugging horas.
+
+## Intento Fallido 5: IndentationError en execute_recharge tras paste manual
+* **Fecha:** 19/05/2026
+* **Contexto:** Ciclo TDD 8b (límites de depósito), fase GREEN. Edit puntual para añadir el chequeo `check_deposit_within_limits` al inicio de `execute_recharge`.
+* **Error presentado:** `IndentationError: unexpected indent`. El comentario quedó en columna 0 y el `from compliance.services import...` quedó en columna 5 (esperado: columna 4). Python rechaza el archivo entero al importarlo y ningún test ejecuta.
+* **Causa raíz:** Paste manual sobre un archivo crítico sin asistencia de linter. La línea de comentario aparece sin indentación porque el copy/paste de Markdown a veces arrastra distinta cantidad de espacios.
+* **Solución aplicada:** Reescribir el archivo completo con el bloque corregido, manteniendo `wallet/services.py` como archivo "intocable salvo cuando hay que tocar". **Refuerza la lección del Intento Fallido 4:** los edits manuales en services críticos son riesgosos; el patrón seguro es reemplazar el archivo entero, no parchar inline.
