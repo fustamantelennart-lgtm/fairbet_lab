@@ -1,4 +1,4 @@
-# === Python ===
+# Python
 *.pyc
 *.pyo
 *.pyd
@@ -7,31 +7,23 @@ __pycache__/
 *.egg
 .Python
 
-# === Virtual environments ===
+# Entornos virtuales
 venv/
 .venv/
 env/
 ENV/
 
-# === Django residual ===
+# Django
 db.sqlite3
 db.sqlite3-journal
 media/
 staticfiles/
 
-# === Variables de entorno (NUNCA commitear) ===
-.env
-.env.local
-.env.*.local
-# Pero SÍ versionamos la plantilla:
+# Variables de entorno
+.env*
 !.env.example
 
-# NOTA: NO ignoramos config/settings/local.py porque es el módulo de
-# settings de desarrollo que TODOS los devs usan (referenciado en
-# docker-compose.yml). En proyectos antiguos era común ignorarlo, pero
-# en este proyecto se versiona por convención del equipo.
-
-# === Testing / Caches ===
+# Testing
 .pytest_cache/
 .hypothesis/
 .coverage
@@ -39,17 +31,17 @@ staticfiles/
 htmlcov/
 .tox/
 
-# === Docker ===
+# Docker
 postgres_data/
 
-# === IDEs y editores ===
+# IDEs
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# === Sistema Operativo ===
+# SO
 .DS_Store
 Thumbs.db
 desktop.ini
